@@ -20,6 +20,11 @@ use schemars::{JsonSchema, json_schema, schema_for};
 
 static BUBBLEWRAP_BINARY: &[u8] = include_bytes!(env!("BUBBLEWRAP_PATH"));
 
+fn cstring(value: impl Into<Vec<u8>>, description: &str) -> anyhow::Result<CString> {
+    CString::new(value)
+        .map_err(|e| anyhow::anyhow!("Failed to convert {description} to a C string: {e}"))
+}
+
 #[derive(Error, Debug)]
 enum BubblewrapError {
     #[error("Failed to create memfd for bwrap: {0}")]
@@ -172,6 +177,12 @@ impl<'de> Deserialize<'de> for EnvironmentVariable {
         D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
+        if s.contains('\0') {
+            return Err(serde::de::Error::custom(
+                "Environment variable entry cannot contain a NUL byte",
+            ));
+        }
+
         let parts: Vec<&str> = s.splitn(2, '=').collect();
         let (key, value) = match parts.len() {
             1 => (parts[0].to_string(), EnvironmentVariableValue::Inherit),
@@ -205,7 +216,7 @@ impl JsonSchema for EnvironmentVariable {
                             Two formats are supported: `KEY=VALUE` sets the environment variable `KEY` to `VALUE`.  \
                             `KEY` sets the environment variable `KEY` to the value of the environment variable `KEY` that agent-run sees.  \
                             If `KEY` is not set in the environment, it will be unset for the tool.",
-            "pattern": r"^[^=]+(=.*)?$",
+            "pattern": r"^[^=\u0000]+(=[^\u0000]*)?$",
         })
     }
 }
@@ -588,9 +599,10 @@ fn main() -> anyhow::Result<ExitCode> {
     argv.push(Cow::Borrowed(c"--unshare-all"));
     argv.push(Cow::Borrowed(c"--die-with-parent"));
     argv.push(Cow::Borrowed(c"--seccomp"));
-    argv.push(Cow::Owned(
-        CString::new(seccomp_filter_fd.as_raw_fd().to_string()).unwrap(),
-    ));
+    argv.push(Cow::Owned(cstring(
+        seccomp_filter_fd.as_raw_fd().to_string(),
+        "seccomp file descriptor",
+    )?));
 
     let network = tool_config
         .network
@@ -628,8 +640,7 @@ fn main() -> anyhow::Result<ExitCode> {
         log_debug!("Mounting {} as read-write", expanded.display());
 
         argv.push(Cow::Borrowed(c"--bind"));
-        let path = CString::new(expanded.into_os_string().into_encoded_bytes())
-            .expect("Failed to convert mount path to CString");
+        let path = cstring(expanded.into_os_string().into_encoded_bytes(), "mount path")?;
         argv.push(Cow::Owned(path.clone()));
         argv.push(Cow::Owned(path));
     }
@@ -652,8 +663,11 @@ fn main() -> anyhow::Result<ExitCode> {
                         log_trace!("Inheriting environment variable {}={}", env.key, value);
 
                         argv.push(Cow::Borrowed(c"--setenv"));
-                        argv.push(Cow::Owned(CString::new(env.key).unwrap()));
-                        argv.push(Cow::Owned(CString::new(value).unwrap()));
+                        argv.push(Cow::Owned(cstring(env.key, "environment variable key")?));
+                        argv.push(Cow::Owned(cstring(
+                            value,
+                            "inherited environment variable value",
+                        )?));
                     }
                     None => {
                         log_trace!(
@@ -663,7 +677,7 @@ fn main() -> anyhow::Result<ExitCode> {
 
                         // If the variable is not set in the host environment, it will be unset for the tool.
                         argv.push(Cow::Borrowed(c"--unsetenv"));
-                        argv.push(Cow::Owned(CString::new(env.key).unwrap()));
+                        argv.push(Cow::Owned(cstring(env.key, "environment variable key")?));
                     }
                 }
             }
@@ -671,22 +685,23 @@ fn main() -> anyhow::Result<ExitCode> {
                 log_trace!("Setting environment variable {}={}", env.key, value);
 
                 argv.push(Cow::Borrowed(c"--setenv"));
-                argv.push(Cow::Owned(CString::new(env.key).unwrap()));
-                argv.push(Cow::Owned(CString::new(value).unwrap()));
+                argv.push(Cow::Owned(cstring(env.key, "environment variable key")?));
+                argv.push(Cow::Owned(cstring(value, "environment variable value")?));
             }
         }
     }
 
     argv.push(Cow::Borrowed(c"--"));
-    argv.extend(
-        args.command
-            .iter()
-            .map(|s| Cow::Owned(CString::new(s.as_str()).unwrap())),
-    );
+    for argument in args.command {
+        argv.push(Cow::Owned(cstring(argument, "command argument")?));
+    }
 
     let mut envp: Vec<CString> = Vec::new();
     for (key, value) in std::env::vars() {
-        envp.push(CString::new(format!("{}={}", key, value)).unwrap());
+        envp.push(cstring(
+            format!("{}={}", key, value),
+            "host environment entry",
+        )?);
     }
 
     log_trace!(

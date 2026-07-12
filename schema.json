@@ -28,7 +28,7 @@
     "EnvironmentVariable": {
       "description": "An environment variable to set for a tool.  Two formats are supported: `KEY=VALUE` sets the environment variable `KEY` to `VALUE`.  `KEY` sets the environment variable `KEY` to the value of the environment variable `KEY` that agent-run sees.  If `KEY` is not set in the environment, it will be unset for the tool.",
       "type": "string",
-      "pattern": "^[^=]+(=.*)?$"
+      "pattern": "^[^=\\u0000]+(=[^\\u0000]*)?$"
     },
     "ToolConfig": {
       "description": "Configuration for a specific tool.  Tools are matched based on the basename\nof the first argument passed to the agent-run command.  If no tool matches,\nthe global configuration is used.",
