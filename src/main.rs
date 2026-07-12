@@ -8,7 +8,7 @@ use std::{
     io::{PipeWriter, Write},
     os::{
         fd::{AsFd as _, AsRawFd as _, FromRawFd, IntoRawFd as _, OwnedFd},
-        unix::ffi::OsStringExt as _,
+        unix::ffi::{OsStrExt as _, OsStringExt as _},
     },
     path::PathBuf,
     process::ExitCode,
@@ -512,6 +512,16 @@ fn resolve_path(
     path: &std::path::Path,
     config_path: Option<&std::path::Path>,
 ) -> Result<Option<PathBuf>, PathResolutionError> {
+    if path.as_os_str().as_bytes().contains(&0) {
+        return Err(PathResolutionError::Resolve(
+            path.to_path_buf(),
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Mount path cannot contain a NUL byte",
+            ),
+        ));
+    }
+
     let expanded = shellexpand::tilde(path.to_str().ok_or_else(|| {
         PathResolutionError::Resolve(
             path.to_path_buf(),

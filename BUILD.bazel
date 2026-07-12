@@ -2,7 +2,7 @@ load("@bazel_lib//lib:run_binary.bzl", "run_binary")
 load("@bazel_lib//lib:write_source_files.bzl", "write_source_files")
 load("@crates//:defs.bzl", "aliases", "all_crate_deps")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
-load("@rules_rust//rust:defs.bzl", "rust_clippy")
+load("@rules_rust//rust:defs.bzl", "rust_clippy", "rust_test")
 
 rust_binary(
     name = "agent-run",
@@ -59,10 +59,59 @@ write_source_files(
     },
 )
 
+_INTEGRATION_TEST_DATA = [
+    ":agent-run",
+    "Cargo.toml",
+    "schema.json",
+    "tools/workspace-status.sh",
+]
+
+_INTEGRATION_TEST_ENV = {
+    "AGENT_RUN_BINARY": "$(rootpath :agent-run)",
+    "AGENT_RUN_CARGO_TOML": "$(rootpath Cargo.toml)",
+    "AGENT_RUN_SCHEMA": "$(rootpath schema.json)",
+    "AGENT_RUN_WORKSPACE_STATUS": "$(rootpath tools/workspace-status.sh)",
+}
+
+rust_test(
+    name = "integration_test",
+    srcs = ["tests/integration.rs"],
+    aliases = aliases(),
+    args = [
+        "--skip",
+        "terminal_",
+    ],
+    crate_name = "integration_test",
+    data = _INTEGRATION_TEST_DATA,
+    edition = "2024",
+    env = _INTEGRATION_TEST_ENV,
+    size = "small",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = all_crate_deps(normal = True),
+)
+
+# Bazel's test sandbox does not expose a usable PTY device.
+rust_test(
+    name = "terminal_integration_test",
+    srcs = ["tests/integration.rs"],
+    aliases = aliases(),
+    args = ["terminal_"],
+    crate_name = "terminal_integration_test",
+    data = _INTEGRATION_TEST_DATA,
+    edition = "2024",
+    env = _INTEGRATION_TEST_ENV,
+    size = "small",
+    tags = ["no-sandbox"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = all_crate_deps(normal = True),
+)
+
 rust_clippy(
     name = "clippy",
+    testonly = True,
     deps = [
         ":agent-run",
         ":generate_schema",
+        ":integration_test",
     ],
 )
