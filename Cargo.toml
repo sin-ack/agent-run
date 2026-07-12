@@ -2,6 +2,9 @@
 name = "agent-run"
 version = "0.1.0"
 edition = "2024"
+license = "GPL-3.0-only"
+description = "Run a coding agent in a sandboxed environment"
+repository = "https://github.com/sin-ack/agent-run"
 resolver = "2"
 
 [dependencies]

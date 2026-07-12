@@ -142,8 +142,13 @@ You need [Bazel](https://bazel.build).  I recommend using
 - Run it via Bazel: `bazel run --run_in_cwd //:agent-run -- [args...]`
 - Build a release binary: `bazel build --config=size --platforms=//platforms:[target] //:agent-run`
 - Run tests: `bazel test //...`
+- Regenerate third-party license notices (requires
+  [`cargo-about`](https://github.com/EmbarkStudios/cargo-about)):
+  `tools/update-third-party-licenses.sh`
   
 ## License
 
 This project is licensed under the GNU General Public License, version 3.
-See [LICENSE](LICENSE) for details.
+See [LICENSE](LICENSE) for details.  See
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for third-party license
+notices.
