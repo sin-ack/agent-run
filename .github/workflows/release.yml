@@ -28,6 +28,7 @@ jobs:
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
+          bazelrc: common --config=ci
           disk-cache: ${{ github.workflow }}
           repository-cache: true
 
@@ -82,7 +83,7 @@ jobs:
 
       - name: Run final checks
         run: |
-          bazel test //... --test_output=errors
+          bazel test //...
           bazel build //:clippy
           test -z "$(git status --porcelain --untracked-files=no)"
 

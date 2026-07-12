@@ -63,18 +63,19 @@ _INTEGRATION_TEST_DATA = [
     ":agent-run",
     "Cargo.toml",
     "schema.json",
-    "tools/workspace-status.sh",
+    "//tools:workspace-status.sh",
 ]
 
 _INTEGRATION_TEST_ENV = {
     "AGENT_RUN_BINARY": "$(rootpath :agent-run)",
     "AGENT_RUN_CARGO_TOML": "$(rootpath Cargo.toml)",
     "AGENT_RUN_SCHEMA": "$(rootpath schema.json)",
-    "AGENT_RUN_WORKSPACE_STATUS": "$(rootpath tools/workspace-status.sh)",
+    "AGENT_RUN_WORKSPACE_STATUS": "$(rootpath //tools:workspace-status.sh)",
 }
 
 rust_test(
     name = "integration_test",
+    size = "small",
     srcs = ["tests/integration.rs"],
     aliases = aliases(),
     args = [
@@ -85,7 +86,6 @@ rust_test(
     data = _INTEGRATION_TEST_DATA,
     edition = "2024",
     env = _INTEGRATION_TEST_ENV,
-    size = "small",
     target_compatible_with = ["@platforms//os:linux"],
     deps = all_crate_deps(normal = True),
 )
@@ -93,6 +93,7 @@ rust_test(
 # Bazel's test sandbox does not expose a usable PTY device.
 rust_test(
     name = "terminal_integration_test",
+    size = "small",
     srcs = ["tests/integration.rs"],
     aliases = aliases(),
     args = ["terminal_"],
@@ -100,7 +101,6 @@ rust_test(
     data = _INTEGRATION_TEST_DATA,
     edition = "2024",
     env = _INTEGRATION_TEST_ENV,
-    size = "small",
     tags = ["no-sandbox"],
     target_compatible_with = ["@platforms//os:linux"],
     deps = all_crate_deps(normal = True),

@@ -1,3 +1,9 @@
+########################
+# Import bazelrc presets
+import %workspace%/tools/preset.bazelrc
+
+########################
+# Project-specific flags
 build --@rules_rust//rust/toolchain/channel=nightly
 build --workspace_status_command=./tools/workspace-status.sh
 
@@ -8,3 +14,7 @@ build:size --@rules_rust//rust/settings:extra_rustc_flag=-Cstrip=symbols
 build:size --@rules_rust//rust/settings:extra_rustc_flag=-Cpanic=abort
 build:size --@rules_rust//rust/settings:extra_rustc_flag=-Ccodegen-units=1
 build:size --@rules_rust//rust/settings:lto=fat
+
+########################
+# User preferences
+try-import %workspace%/user.bazelrc

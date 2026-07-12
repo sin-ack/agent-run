@@ -1,0 +1,7 @@
+load("@bazelrc-preset.bzl", "bazelrc_preset")
+
+bazelrc_preset(
+    name = "preset",
+)
+
+exports_files(["workspace-status.sh"])
