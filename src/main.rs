@@ -215,6 +215,7 @@ impl JsonSchema for EnvironmentVariable {
 /// the global configuration is used.
 #[derive(Serialize, Deserialize, Default, Debug)]
 #[cfg_attr(feature = "schema", derive(JsonSchema))]
+#[serde(deny_unknown_fields)]
 struct ToolConfig {
     /// Whether to enable network access.  If false, the tool will not be able
     /// to use the network.  Default is true.
@@ -259,6 +260,7 @@ struct ToolConfig {
 /// Configuration for agent-run.
 #[derive(Serialize, Deserialize, Default, Debug)]
 #[cfg_attr(feature = "schema", derive(JsonSchema))]
+#[serde(deny_unknown_fields)]
 struct Config {
     /// Global configuration for all tools.
     #[serde(default)]
