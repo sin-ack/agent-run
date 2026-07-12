@@ -22,11 +22,21 @@ That's it!
 > agent-run uses bwrap so it only works on a Linux system.  Additionally you
 > need unprivileged user namespaces enabled.
 
-> [!NOTE]
-> agent-run won't work on NixOS at the moment since it embeds a dynamically-linked
-> bwrap binary.  I might add a build configuration for this later.
-
 ## Installation
+
+### Nix
+
+Run directly from the flake:
+
+``` console
+nix run github:sin-ack/agent-run -- <command>...
+```
+
+Or install it into your profile:
+
+``` console
+nix profile install github:sin-ack/agent-run
+```
 
 ### Mise
 

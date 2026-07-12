@@ -1,4 +1,8 @@
+# Bazel
 /bazel-*
 /external
 /target
 /user.bazelrc
+
+# Nix
+/result
