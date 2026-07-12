@@ -4,9 +4,11 @@ Run a coding agent in a sandboxed environment.
 
 ## Features
 
-- Tiny standalone binary (<1MB).  Runs on any recent GNU/Linux system.
+- Tiny standalone binary (<1MB).  Runs on any recent GNU/Linux system[^1].
 - Simple TOML-based configuration.
 - JSON schema for config assistance.
+
+[^1]: Currently aarch64 and x86_64 are directly supported.
 
 ## Installation
 
