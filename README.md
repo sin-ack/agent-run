@@ -119,6 +119,15 @@ The environment variable `RUST_LOG` is respected, and supports `debug` and
 
 Nothing satisfied all of these criteria so I made my own.
 
+## Threat model
+
+`agent-run` is primarily intended to catch *mistakes* made by agents.  Arbitrary
+malicious code is not guaranteed to be handled perfectly safely.  In particular,
+because the entire file system is exposed as read-only, information stealing
+(when network access is enabled) and things like writing to user-writable socket
+files is still possible.  If this is your threat model, consider using things
+like microVMs.
+
 ## How?
 
 - We build a [`bwrap`](https://github.com/containers/bwrap) binary for the target.
