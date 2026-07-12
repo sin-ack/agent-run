@@ -53,7 +53,7 @@ first argument of the command.
 Currently, no configuration merging across multiple configs is done.  This might
 change later.
 
-### Example for pi-coding-agent
+### Coding agent examples
 
 ``` toml
 # Add this line to your TOML file to add support for completion:
@@ -74,6 +74,29 @@ mount = [
     # Pi writes bash outputs to /tmp/pi-bash-*.log so we must make all of /tmp
     # writable.  :(
     "/tmp",
+]
+
+[tools.codex]
+mount = ["~/.codex"]
+
+[tools.opencode]
+# OpenCode extracts its native OpenTUI library to TMPDIR so we need a writable
+# tmpdir for it.  Make sure /tmp/opencode exists before running agent-run.
+env = ["TMPDIR=/tmp/opencode"]
+mount = [
+    "/tmp/opencode",
+    "~/.cache/opencode",
+    "~/.config/opencode",
+    "~/.local/share/opencode",
+    "~/.local/state/opencode",
+]
+
+[tools.claude]
+mount = [
+    "~/.claude",
+    # Workspace trust requires ~/.claude.json.  It must exist before launching
+    # agent-run.
+    "~/.claude.json",
 ]
 ```
 
@@ -108,6 +131,30 @@ For a full reference see [schema.json](./schema.json).
 
 The environment variable `RUST_LOG` is respected, and supports `debug` and
 `trace` for compact and verbose debug logs respectively.
+
+### Claude Code remains at the workspace trust prompt
+
+Claude Code stores workspace trust in `~/.claude.json`, not in `~/.claude`.
+Both paths must therefore be writable (and must exist before `agent-run` starts):
+
+``` toml
+[tools.claude]
+mount = ["~/.claude", "~/.claude.json"]
+```
+
+### OpenCode fails to load a `/$bunfs/.../libopentui-*.so` file
+
+You need the following:
+
+``` toml
+[tools.opencode]
+mount = [
+    "/tmp/opencode",
+]
+env = ["TMPDIR=/tmp/opencode"]
+```
+
+Bun tries to extract bundled libraries to TMPDIR but fails by default.
 
 ## Why?
 
