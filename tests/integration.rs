@@ -522,6 +522,15 @@ fn install_signal_handler(signal: libc::c_int) {
     }
 }
 
+fn wait_for_signal() -> ! {
+    println!("READY");
+    std::io::stdout().flush().unwrap();
+    loop {
+        // SAFETY: pause simply waits for a signal.
+        unsafe { libc::pause() };
+    }
+}
+
 fn run_test_helper(operation: &str) {
     match operation {
         "noop" => {}
@@ -592,23 +601,14 @@ fn run_test_helper(operation: &str) {
             println!("TIOCSTI_EPERM");
             println!("TTY_OK");
         }
+        "wait_forever" => wait_for_signal(),
         "wait_sigwinch" => {
             install_signal_handler(libc::SIGWINCH);
-            println!("READY");
-            std::io::stdout().flush().unwrap();
-            loop {
-                // SAFETY: pause simply waits for a signal.
-                unsafe { libc::pause() };
-            }
+            wait_for_signal();
         }
         "wait_sigint" => {
             install_signal_handler(libc::SIGINT);
-            println!("READY");
-            std::io::stdout().flush().unwrap();
-            loop {
-                // SAFETY: pause simply waits for a signal.
-                unsafe { libc::pause() };
-            }
+            wait_for_signal();
         }
         other => panic!("unknown test helper operation: {other}"),
     }
@@ -622,6 +622,12 @@ fn agent_run_test_helper() {
     run_test_helper(operation.to_str().expect("helper operation must be UTF-8"));
 }
 
+#[derive(Clone, Copy)]
+enum SigintDisposition {
+    Default,
+    Ignore,
+}
+
 struct PtyProcess {
     pid: libc::pid_t,
     master: RawFd,
@@ -631,6 +637,24 @@ struct PtyProcess {
 
 impl PtyProcess {
     fn spawn(config: &Path, operation: &str, directory: &Path) -> Self {
+        Self::spawn_with_sigint_disposition(
+            config,
+            operation,
+            directory,
+            SigintDisposition::Default,
+        )
+    }
+
+    fn spawn_ignoring_sigint(config: &Path, operation: &str, directory: &Path) -> Self {
+        Self::spawn_with_sigint_disposition(config, operation, directory, SigintDisposition::Ignore)
+    }
+
+    fn spawn_with_sigint_disposition(
+        config: &Path,
+        operation: &str,
+        directory: &Path,
+        sigint_disposition: SigintDisposition,
+    ) -> Self {
         let executable = std::env::current_exe().unwrap();
         let arguments = [
             agent_run_binary().into_os_string(),
@@ -689,6 +713,23 @@ impl PtyProcess {
         if pid == 0 {
             // SAFETY: These calls are async-signal-safe and all pointers are valid in the child.
             unsafe {
+                let mut sigint_action: libc::sigaction = std::mem::zeroed();
+                sigint_action.sa_sigaction = match sigint_disposition {
+                    SigintDisposition::Default => libc::SIG_DFL,
+                    SigintDisposition::Ignore => libc::SIG_IGN,
+                };
+                libc::sigemptyset(&mut sigint_action.sa_mask);
+                if libc::sigaction(libc::SIGINT, &sigint_action, std::ptr::null_mut()) != 0 {
+                    libc::_exit(125);
+                }
+
+                let mut sigint_mask: libc::sigset_t = std::mem::zeroed();
+                libc::sigemptyset(&mut sigint_mask);
+                libc::sigaddset(&mut sigint_mask, libc::SIGINT);
+                if libc::sigprocmask(libc::SIG_UNBLOCK, &sigint_mask, std::ptr::null_mut()) != 0 {
+                    libc::_exit(125);
+                }
+
                 if libc::chdir(directory.as_ptr()) != 0 {
                     libc::_exit(126);
                 }
@@ -876,13 +917,29 @@ fn terminal_sigwinch_reaches_the_command() {
 }
 
 #[test]
-fn terminal_ctrl_c_reaches_the_command_and_outer_process() {
+fn terminal_ctrl_c_reaches_the_command() {
     let temp = TempDirectory::new();
     let config = write_config(temp.path(), "");
-    let mut child = PtyProcess::spawn(&config, "wait_sigint", temp.path());
+
+    // If agent-run and bwrap also receive SIGINT, they can tear down the sandbox before the
+    // command's signal handler is scheduled. Ignore SIGINT in those wrapper processes so this
+    // test independently guarantees that the foreground command receives terminal-generated
+    // SIGINT.
+    let mut child = PtyProcess::spawn_ignoring_sigint(&config, "wait_sigint", temp.path());
     child.read_until(b"READY");
     child.write(b"\x03");
     child.read_until(b"GOT_SIGNAL");
+    let (status, output) = child.wait();
+    assert_wait_status_success(status, &output);
+}
+
+#[test]
+fn terminal_ctrl_c_terminates_the_outer_process() {
+    let temp = TempDirectory::new();
+    let config = write_config(temp.path(), "");
+    let mut child = PtyProcess::spawn(&config, "wait_forever", temp.path());
+    child.read_until(b"READY");
+    child.write(b"\x03");
     let (status, output) = child.wait();
     assert!(
         libc::WIFSIGNALED(status) && libc::WTERMSIG(status) == libc::SIGINT,
