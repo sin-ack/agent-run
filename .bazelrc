@@ -1,4 +1,5 @@
 build --@rules_rust//rust/toolchain/channel=nightly
+build --workspace_status_command=./tools/workspace-status.sh
 
 build:size --compilation_mode=opt
 build:size --copt=-Os

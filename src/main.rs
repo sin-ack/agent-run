@@ -22,6 +22,7 @@ use thiserror::Error;
 use schemars::{JsonSchema, json_schema, schema_for};
 
 static BUBBLEWRAP_BINARY: &[u8] = include_bytes!(env!("BUBBLEWRAP_PATH"));
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn cstring(value: impl Into<Vec<u8>>, description: &str) -> anyhow::Result<CString> {
     CString::new(value)
@@ -298,6 +299,7 @@ Options:
       --config <CONFIG>  Path to the configuration file. If not specified, the closest
                          `.agent-run/config.toml` file is used
   -h, --help             Print help
+  -V, --version          Print version
 "#;
 
 impl Args {
@@ -343,6 +345,9 @@ impl Args {
                 }
             } else if arg == "-h" || arg == "--help" {
                 print!("{}", HELP_TEXT);
+                std::process::exit(0);
+            } else if arg == "-V" || arg == "--version" {
+                println!("agent-run {VERSION}");
                 std::process::exit(0);
             } else if arg.starts_with('-') {
                 anyhow::bail!("unknown option: {arg}");

@@ -17,6 +17,8 @@ rust_binary(
     rustc_env = {
         "BUBBLEWRAP_PATH": "$(execpath @bubblewrap)",
     },
+    rustc_env_files = ["version.env"],
+    stamp = 1,
     visibility = ["//visibility:public"],
     deps = all_crate_deps(normal = True),
 )
@@ -35,6 +37,8 @@ rust_binary(
     rustc_env = {
         "BUBBLEWRAP_PATH": "$(execpath @bubblewrap)",
     },
+    rustc_env_files = ["version.env"],
+    stamp = 1,
     deps = all_crate_deps(normal = True),
 )
 
