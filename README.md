@@ -12,6 +12,15 @@ Run a coding agent in a sandboxed environment.
 
 ## Installation
 
+### Mise
+
+Run: `mise use github:sin-ack/agent-run@latest`
+
+(You might need to pass `--before 0d` to get the latest release, due to Mise's
+date filters.)
+
+### Manual
+
 - Download the binary from the latest release: https://github.com/sin-ack/agent-run/releases/latest
 - Put it somewhere in your PATH, e.g. `$HOME/.local/bin`.
 - Write your [configuration](#configuration).
