@@ -101,6 +101,11 @@ Tool configs have the following keys:
     host environment variable's value.
 
 For a full reference see [schema.json](./schema.json).
+  
+## Troubleshooting
+
+The environment variable `RUST_LOG` is respected, and supports `debug` and
+`trace` for compact and verbose debug logs respectively.
 
 ## Why?
 
