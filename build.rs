@@ -6,6 +6,12 @@ fn main() {
         // Pass it through, it was already set by the user.
         println!("cargo:rustc-env=BUBBLEWRAP_PATH={bubblewrap_path}");
     } else {
+        if std::env::var_os("CARGO_FEATURE_EXTERNAL_BWRAP").is_some() {
+            panic!(
+                "The external-bwrap feature requires BUBBLEWRAP_PATH to be set to the runtime path of a bubblewrap binary."
+            );
+        }
+
         // See if we're in the Bazel workspace.
         if std::fs::metadata("MODULE.bazel").is_ok() {
             println!("cargo:rerun-if-changed=MODULE.bazel");

@@ -5,13 +5,20 @@ mod tracing;
 use std::{
     borrow::Cow,
     ffi::{CStr, CString},
-    io::{PipeWriter, Write},
     os::{
-        fd::{AsFd as _, AsRawFd as _, FromRawFd, IntoRawFd as _, OwnedFd},
+        fd::AsRawFd as _,
         unix::ffi::{OsStrExt as _, OsStringExt as _},
     },
     path::PathBuf,
     process::ExitCode,
+};
+
+#[cfg(any(not(feature = "external-bwrap"), feature = "schema"))]
+use std::io::Write as _;
+#[cfg(not(feature = "external-bwrap"))]
+use std::{
+    io::PipeWriter,
+    os::fd::{AsFd as _, FromRawFd, IntoRawFd as _, OwnedFd},
 };
 
 use nix::unistd::ForkResult;
@@ -21,7 +28,14 @@ use thiserror::Error;
 #[cfg(feature = "schema")]
 use schemars::{JsonSchema, json_schema, schema_for};
 
+#[cfg(not(feature = "external-bwrap"))]
 static BUBBLEWRAP_BINARY: &[u8] = include_bytes!(env!("BUBBLEWRAP_PATH"));
+#[cfg(feature = "external-bwrap")]
+static BUBBLEWRAP_PATH: &CStr =
+    match CStr::from_bytes_with_nul(concat!(env!("BUBBLEWRAP_PATH"), "\0").as_bytes()) {
+        Ok(path) => path,
+        Err(_) => panic!("BUBBLEWRAP_PATH contains a NUL byte"),
+    };
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn cstring(value: impl Into<Vec<u8>>, description: &str) -> anyhow::Result<CString> {
@@ -31,20 +45,25 @@ fn cstring(value: impl Into<Vec<u8>>, description: &str) -> anyhow::Result<CStri
 
 #[derive(Error, Debug)]
 enum BubblewrapError {
+    #[cfg(not(feature = "external-bwrap"))]
     #[error("Failed to create memfd for bwrap: {0}")]
     MemfdCreate(nix::errno::Errno),
+    #[cfg(not(feature = "external-bwrap"))]
     #[error("Failed to write bwrap binary to memfd: {0}")]
     Write(std::io::Error),
+    #[cfg(not(feature = "external-bwrap"))]
     #[error("Failed to set permissions on bwrap memfd: {0}")]
     Fchmod(nix::errno::Errno),
+    #[cfg(not(feature = "external-bwrap"))]
     #[error("Failed to seal bwrap memfd: {0}")]
     Fcntl(nix::errno::Errno),
     #[error("Failed to fork for bwrap: {0}")]
     Fork(nix::errno::Errno),
     #[error("Failed to execute bwrap: {0}")]
-    Execveat(nix::errno::Errno),
+    Exec(nix::errno::Errno),
     #[error("Failed to wait for bwrap: {0}")]
     Waitpid(nix::errno::Errno),
+    #[cfg(not(feature = "external-bwrap"))]
     #[error("Failed to close bwrap memfd: {0}")]
     MemfdClose(nix::errno::Errno),
     #[error("bwrap was terminated by signal: {0:?}")]
@@ -57,33 +76,34 @@ fn exec_bwrap<SA: AsRef<CStr>, SE: AsRef<CStr>>(
     argv: &[SA],
     envp: &[SE],
 ) -> Result<ExitCode, BubblewrapError> {
-    let fd = match nix::sys::memfd::memfd_create(
-        "bubblewrap",
-        nix::sys::memfd::MFdFlags::from_bits_retain(
-            libc::MFD_CLOEXEC | libc::MFD_ALLOW_SEALING | libc::MFD_EXEC,
-        ),
-    ) {
-        Ok(fd) => fd,
-        Err(e) => {
-            if e == nix::errno::Errno::EINVAL {
-                // MEMFD_EXEC is not supported in this kernel, so we fall back to a regular memfd.
-                match nix::sys::memfd::memfd_create(
-                    "bubblewrap",
-                    nix::sys::memfd::MFdFlags::MFD_CLOEXEC
-                        | nix::sys::memfd::MFdFlags::MFD_ALLOW_SEALING,
-                ) {
-                    Ok(fd) => fd,
-                    Err(e) => {
-                        return Err(BubblewrapError::MemfdCreate(e));
-                    }
-                }
-            } else {
-                return Err(BubblewrapError::MemfdCreate(e));
-            }
-        }
-    };
-
+    #[cfg(not(feature = "external-bwrap"))]
     let fd = {
+        let fd = match nix::sys::memfd::memfd_create(
+            "bubblewrap",
+            nix::sys::memfd::MFdFlags::from_bits_retain(
+                libc::MFD_CLOEXEC | libc::MFD_ALLOW_SEALING | libc::MFD_EXEC,
+            ),
+        ) {
+            Ok(fd) => fd,
+            Err(e) => {
+                if e == nix::errno::Errno::EINVAL {
+                    // MEMFD_EXEC is not supported in this kernel, so we fall back to a regular memfd.
+                    match nix::sys::memfd::memfd_create(
+                        "bubblewrap",
+                        nix::sys::memfd::MFdFlags::MFD_CLOEXEC
+                            | nix::sys::memfd::MFdFlags::MFD_ALLOW_SEALING,
+                    ) {
+                        Ok(fd) => fd,
+                        Err(e) => {
+                            return Err(BubblewrapError::MemfdCreate(e));
+                        }
+                    }
+                } else {
+                    return Err(BubblewrapError::MemfdCreate(e));
+                }
+            }
+        };
+
         let mut writer = PipeWriter::from(fd);
         writer
             .write_all(BUBBLEWRAP_BINARY)
@@ -114,7 +134,9 @@ fn exec_bwrap<SA: AsRef<CStr>, SE: AsRef<CStr>>(
     // SAFETY: Nothing else is happening so it's safe.
     match unsafe { nix::unistd::fork() } {
         Ok(ForkResult::Parent { child }) => {
+            #[cfg(not(feature = "external-bwrap"))]
             nix::unistd::close(fd).map_err(BubblewrapError::MemfdClose)?;
+
             let status =
                 nix::sys::wait::waitpid(Some(child), None).map_err(BubblewrapError::Waitpid)?;
             match status {
@@ -126,8 +148,12 @@ fn exec_bwrap<SA: AsRef<CStr>, SE: AsRef<CStr>>(
             }
         }
         Ok(ForkResult::Child) => {
+            #[cfg(not(feature = "external-bwrap"))]
             nix::unistd::execveat(fd, c"", argv, envp, nix::fcntl::AtFlags::AT_EMPTY_PATH)
-                .map_err(BubblewrapError::Execveat)?;
+                .map_err(BubblewrapError::Exec)?;
+
+            #[cfg(feature = "external-bwrap")]
+            nix::unistd::execve(BUBBLEWRAP_PATH, argv, envp).map_err(BubblewrapError::Exec)?;
 
             unreachable!();
         }

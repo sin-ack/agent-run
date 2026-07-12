@@ -22,4 +22,5 @@ toml = "1.1.2"
 walkdir = "2.5.0"
 
 [features]
+external-bwrap = []
 schema = ["dep:schemars", "dep:serde_json"]
