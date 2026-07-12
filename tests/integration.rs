@@ -388,6 +388,18 @@ fn home_tilde_mount_is_expanded() {
 }
 
 #[test]
+fn individual_files_can_be_mounted_writable() {
+    let temp = TempDirectory::new();
+    let state = temp.path().join("state.json");
+    fs::write(&state, "before").unwrap();
+    let config = write_config(temp.path(), "[global]\nmount = [\"state.json\"]\n");
+
+    let output = run_helper("write_file_mount", temp.path(), Some(&config));
+    assert_success(&output);
+    assert_eq!(fs::read_to_string(state).unwrap(), "after");
+}
+
+#[test]
 fn child_exit_status_is_propagated() {
     let temp = TempDirectory::new();
     let config = write_config(temp.path(), "");
@@ -548,6 +560,7 @@ fn run_test_helper(operation: &str) {
         "print_x" => println!("X={}", std::env::var("X").unwrap()),
         "print_foo" => println!("FOO={}", std::env::var("FOO").unwrap()),
         "write_tilde_mount" => fs::write("home/writable/created", "ok").unwrap(),
+        "write_file_mount" => fs::write("state.json", "after").unwrap(),
         "exit_42" => std::process::exit(42),
         "print_non_utf8" => {
             let value = std::env::var_os("NON_UTF8_TEST").unwrap().into_vec();
