@@ -1,3 +1,6 @@
+#[macro_use]
+mod tracing;
+
 use std::{
     borrow::Cow,
     ffi::{CStr, CString},
@@ -267,11 +270,11 @@ enum ConfigError {
 fn parse_config(path: Option<&std::path::Path>) -> Result<(Config, Option<PathBuf>), ConfigError> {
     let path = match path {
         Some(path) => {
-            tracing::debug!("Using configuration file: {}", path.display());
+            log_debug!("Using configuration file: {}", path.display());
             path.to_path_buf()
         }
         None => {
-            tracing::debug!(
+            log_debug!(
                 "No configuration file specified, searching for .agent-run/config.toml"
             );
 
@@ -279,15 +282,15 @@ fn parse_config(path: Option<&std::path::Path>) -> Result<(Config, Option<PathBu
             let mut dir = std::env::current_dir()?;
             loop {
                 let config_path = dir.join(".agent-run").join("config.toml");
-                tracing::trace!("Checking for configuration file: {}", config_path.display());
+                log_trace!("Checking for configuration file: {}", config_path.display());
 
                 if config_path.exists() {
-                    tracing::debug!("Found configuration file: {}", config_path.display());
+                    log_debug!("Found configuration file: {}", config_path.display());
                     break config_path;
                 }
                 if !dir.pop() {
                     // No config file found, return default config.
-                    tracing::debug!("No configuration file found, using default configuration");
+                    log_debug!("No configuration file found, using default configuration");
                     return Ok((Config::default(), None));
                 }
             }
@@ -296,7 +299,7 @@ fn parse_config(path: Option<&std::path::Path>) -> Result<(Config, Option<PathBu
 
     let config_str = std::fs::read_to_string(&path)?;
     let mut config: Config = toml::from_str(&config_str)?;
-    tracing::debug!("Parsed configuration file: {}", path.display());
+    log_debug!("Parsed configuration file: {}", path.display());
 
     // Network is enabled if unspecified by the user.
     config.global.network = config.global.network.or(Some(true));
@@ -376,14 +379,14 @@ fn resolve_path(
         )
     })?)
     .into_owned();
-    tracing::trace!("Expanded path {} -> {}", path.display(), expanded);
+    log_trace!("Expanded path {} -> {}", path.display(), expanded);
     let expanded_path = PathBuf::from(expanded);
 
     if expanded_path.is_absolute() {
-        tracing::trace!("Path is absolute, nothing to do");
+        log_trace!("Path is absolute, nothing to do");
         Ok(expanded_path)
     } else {
-        tracing::trace!("Path is relative, resolving relative to config file");
+        log_trace!("Path is relative, resolving relative to config file");
         let expanded_path = config_path
             .map(|config_path| {
                 config_path
@@ -393,14 +396,14 @@ fn resolve_path(
                     .join(&expanded_path)
             })
             .unwrap_or(expanded_path);
-        tracing::trace!(
+        log_trace!(
             "Resolved relative path {} -> {}",
             path.display(),
             expanded_path.display()
         );
         let canonicalized_path = std::fs::canonicalize(&expanded_path)
             .map_err(|e| PathResolutionError::Canonicalize(expanded_path.clone(), e))?;
-        tracing::trace!(
+        log_trace!(
             "Canonicalized path {} -> {}",
             expanded_path.display(),
             canonicalized_path.display()
@@ -411,36 +414,32 @@ fn resolve_path(
 }
 
 fn main() -> anyhow::Result<ExitCode> {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
-
     let args = Args::parse();
-    tracing::trace!("Parsed command-line arguments: {:#?}", args);
+    log_trace!("Parsed command-line arguments: {:#?}", args);
 
     let (mut config, config_path) = parse_config(args.config.as_deref())?;
-    tracing::trace!("Parsed configuration: {:#?}", config);
+    log_trace!("Parsed configuration: {:#?}", config);
 
     let tool = tool_name(&args.command)?;
-    tracing::trace!("Determined tool name: {}", tool);
+    log_trace!("Determined tool name: {}", tool);
 
     let tool_config = match config.tools.remove(&tool) {
         Some(tool_config) => {
-            tracing::debug!(
+            log_debug!(
                 "Found tool-specific configuration for {}, merging with global configuration",
                 tool
             );
             merge_configs(config.global, tool_config)
         }
         None => {
-            tracing::debug!(
+            log_debug!(
                 "No tool-specific configuration for {}, using global configuration",
                 tool
             );
             config.global
         }
     };
-    tracing::trace!("Merged tool configuration: {:#?}", tool_config);
+    log_trace!("Merged tool configuration: {:#?}", tool_config);
 
     let mut argv: Vec<Cow<CStr>> = Vec::new();
     argv.push(Cow::Borrowed(c"bwrap"));
@@ -450,10 +449,10 @@ fn main() -> anyhow::Result<ExitCode> {
         .network
         .expect("Network should have a default value");
     if network {
-        tracing::debug!("Enabling network access");
+        log_debug!("Enabling network access");
         argv.push(Cow::Borrowed(c"--share-net"));
     } else {
-        tracing::debug!("Disabling network access");
+        log_debug!("Disabling network access");
     }
 
     // Always read-only mount the root filesystem.
@@ -475,7 +474,7 @@ fn main() -> anyhow::Result<ExitCode> {
                 e
             )
         })?;
-        tracing::debug!("Mounting {} as read-write", expanded.display());
+        log_debug!("Mounting {} as read-write", expanded.display());
 
         if !expanded.exists() {
             eprintln!(
@@ -496,10 +495,10 @@ fn main() -> anyhow::Result<ExitCode> {
         .inherit_env
         .expect("Inherit env should have a default value");
     if !inherit_env {
-        tracing::debug!("Clearing environment variables");
+        log_debug!("Clearing environment variables");
         argv.push(Cow::Borrowed(c"--clearenv"));
     } else {
-        tracing::debug!("Inheriting environment variables from host");
+        log_debug!("Inheriting environment variables from host");
     }
 
     for env in tool_config.env {
@@ -507,14 +506,14 @@ fn main() -> anyhow::Result<ExitCode> {
             EnvironmentVariableValue::Inherit => {
                 match std::env::var(&env.key).ok() {
                     Some(value) => {
-                        tracing::trace!("Inheriting environment variable {}={}", env.key, value);
+                        log_trace!("Inheriting environment variable {}={}", env.key, value);
 
                         argv.push(Cow::Borrowed(c"--setenv"));
                         argv.push(Cow::Owned(CString::new(env.key).unwrap()));
                         argv.push(Cow::Owned(CString::new(value).unwrap()));
                     }
                     None => {
-                        tracing::trace!(
+                        log_trace!(
                             "Environment variable {} is not set in host environment, unsetting for tool",
                             env.key
                         );
@@ -526,7 +525,7 @@ fn main() -> anyhow::Result<ExitCode> {
                 }
             }
             EnvironmentVariableValue::Literal(value) => {
-                tracing::trace!("Setting environment variable {}={}", env.key, value);
+                log_trace!("Setting environment variable {}={}", env.key, value);
 
                 argv.push(Cow::Borrowed(c"--setenv"));
                 argv.push(Cow::Owned(CString::new(env.key).unwrap()));
@@ -547,11 +546,11 @@ fn main() -> anyhow::Result<ExitCode> {
         envp.push(CString::new(format!("{}={}", key, value)).unwrap());
     }
 
-    tracing::trace!(
+    log_trace!(
         "Executing bwrap with arguments: {:?}",
         argv.iter().map(|s| s.as_ref()).collect::<Vec<_>>()
     );
-    tracing::trace!(
+    log_trace!(
         "Executing bwrap with environment: {:?}",
         envp.iter().map(|s| s.as_c_str()).collect::<Vec<_>>()
     );

@@ -13,8 +13,6 @@ serde = { version = "1.0.228", features = ["derive"] }
 shellexpand = "3.1.2"
 thiserror = "2.0.18"
 toml = "1.1.2"
-tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [build-dependencies]
 walkdir = "2.5.0"
