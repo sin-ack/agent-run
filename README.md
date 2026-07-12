@@ -18,7 +18,8 @@ Run a coding agent in a sandboxed environment.
 That's it!
 
 > [!NOTE]
-> agent-run uses bwrap so it only works on a Linux system.
+> agent-run uses bwrap so it only works on a Linux system.  Additionally you
+> need unprivileged user namespaces enabled.
 
 > [!NOTE]
 > agent-run won't work on NixOS at the moment since it embeds a dynamically-linked
