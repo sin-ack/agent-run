@@ -498,7 +498,7 @@ enum PathResolutionError {
 fn resolve_path(
     path: &PathBuf,
     config_path: Option<&PathBuf>,
-) -> Result<PathBuf, PathResolutionError> {
+) -> Result<Option<PathBuf>, PathResolutionError> {
     let expanded = shellexpand::tilde(path.to_str().ok_or_else(|| {
         PathResolutionError::Resolve(
             path.clone(),
@@ -511,7 +511,7 @@ fn resolve_path(
 
     if expanded_path.is_absolute() {
         log_trace!("Path is absolute, nothing to do");
-        Ok(expanded_path)
+        Ok(Some(expanded_path))
     } else {
         log_trace!("Path is relative, resolving relative to config file");
         let expanded_path = config_path
@@ -528,15 +528,27 @@ fn resolve_path(
             path.display(),
             expanded_path.display()
         );
-        let canonicalized_path = std::fs::canonicalize(&expanded_path)
-            .map_err(|e| PathResolutionError::Canonicalize(expanded_path.clone(), e))?;
-        log_trace!(
-            "Canonicalized path {} -> {}",
-            expanded_path.display(),
-            canonicalized_path.display()
-        );
-
-        Ok(canonicalized_path)
+        match std::fs::canonicalize(&expanded_path) {
+            Ok(canonicalized_path) => {
+                log_trace!(
+                    "Canonicalized path {} -> {}",
+                    expanded_path.display(),
+                    canonicalized_path.display()
+                );
+                Ok(Some(canonicalized_path))
+            }
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    log_trace!(
+                        "Path {} does not exist, skipping mount",
+                        expanded_path.display()
+                    );
+                    Ok(None)
+                } else {
+                    Err(PathResolutionError::Canonicalize(expanded_path, e))
+                }
+            }
+        }
     }
 }
 
@@ -596,18 +608,18 @@ fn main() -> anyhow::Result<ExitCode> {
     argv.push(Cow::Borrowed(c"/dev"));
 
     for mount in tool_config.mount {
-        let expanded = resolve_path(&mount, config_path.as_ref()).map_err(|e| {
+        let Some(expanded) = resolve_path(&mount, config_path.as_ref()).map_err(|e| {
             anyhow::anyhow!("Failed to resolve mount path {}: {}", mount.display(), e)
-        })?;
-        log_debug!("Mounting {} as read-write", expanded.display());
-
-        if !expanded.exists() {
+        })?
+        else {
             eprintln!(
                 "Warning: Mount path {} does not exist, skipping",
-                expanded.display()
+                mount.display()
             );
             continue;
-        }
+        };
+
+        log_debug!("Mounting {} as read-write", expanded.display());
 
         argv.push(Cow::Borrowed(c"--bind"));
         let path = CString::new(expanded.into_os_string().into_encoded_bytes())
