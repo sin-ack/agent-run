@@ -525,7 +525,12 @@ fn resolve_path(
 
     if expanded_path.is_absolute() {
         log_trace!("Path is absolute, nothing to do");
-        Ok(Some(expanded_path))
+
+        if expanded_path.exists() {
+            Ok(Some(expanded_path))
+        } else {
+            Ok(None)
+        }
     } else {
         log_trace!("Path is relative, resolving relative to config file");
         let expanded_path = config_path
