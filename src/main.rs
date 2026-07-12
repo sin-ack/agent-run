@@ -357,7 +357,7 @@ fn parse_config(path: Option<&std::path::Path>) -> Result<(Config, Option<PathBu
     let path = match path {
         Some(path) => {
             log_debug!("Using configuration file: {}", path.display());
-            path.to_path_buf()
+            Some(path.to_path_buf())
         }
         None => {
             log_debug!("No configuration file specified, searching for .agent-run/config.toml");
@@ -370,27 +370,35 @@ fn parse_config(path: Option<&std::path::Path>) -> Result<(Config, Option<PathBu
 
                 if config_path.exists() {
                     log_debug!("Found configuration file: {}", config_path.display());
-                    break config_path;
+                    break Some(config_path);
                 }
                 if !dir.pop() {
-                    // No config file found, return default config.
-                    log_debug!("No configuration file found, using default configuration");
-                    return Ok((Config::default(), None));
+                    // No config file found.  We will generate a default configuration below.
+                    break None;
                 }
             }
         }
     };
 
-    let config_str = std::fs::read_to_string(&path)?;
-    let mut config: Config = toml::from_str(&config_str)?;
-    log_debug!("Parsed configuration file: {}", path.display());
+    let mut config = match &path {
+        Some(path) => {
+            let config_str = std::fs::read_to_string(&path)?;
+            let config: Config = toml::from_str(&config_str)?;
+            log_debug!("Parsed configuration file: {}", path.display());
+            config
+        }
+        None => {
+            log_debug!("No configuration file found, using default configuration");
+            Config::default()
+        }
+    };
 
     // Network is enabled if unspecified by the user.
     config.global.network = config.global.network.or(Some(true));
     // Inherit environment variables from host if unspecified by the user.
     config.global.inherit_env = config.global.inherit_env.or(Some(true));
 
-    Ok((config, Some(path)))
+    Ok((config, path))
 }
 
 fn merge_configs(global: ToolConfig, tool: ToolConfig) -> ToolConfig {
