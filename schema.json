@@ -6,20 +6,24 @@
   "properties": {
     "global": {
       "description": "Global configuration for all tools.",
-      "$ref": "#/$defs/ToolConfig"
+      "$ref": "#/$defs/ToolConfig",
+      "default": {
+        "env": [],
+        "inherit_env": null,
+        "mount": [],
+        "network": null
+      }
     },
     "tools": {
       "description": "Per-tool configuration.",
       "type": "object",
       "additionalProperties": {
         "$ref": "#/$defs/ToolConfig"
-      }
+      },
+      "default": {}
     }
   },
-  "required": [
-    "global",
-    "tools"
-  ],
+  "additionalProperties": false,
   "$defs": {
     "EnvironmentVariable": {
       "description": "An environment variable to set for a tool.  Two formats are supported: `KEY=VALUE` sets the environment variable `KEY` to `VALUE`.  `KEY` sets the environment variable `KEY` to the value of the environment variable `KEY` that agent-run sees.  If `KEY` is not set in the environment, it will be unset for the tool.",
@@ -47,7 +51,7 @@
           "default": null
         },
         "mount": {
-          "description": "Directories to mount as read-write to the sandbox.  Currently, each\ndirectory is identity-mapped.\n\nThe full filesystem is always visible as read-only to the tool so that\nrunning commands from the host etc. works.  This is useful for tools\nthat need to write to the filesystem as well.\n\nShell expansions such as `~` and `~user` work.  Environment variables\nare currently not expanded.  Relative paths are relative to the\nconfiguration file; absolute paths are left as-is. No globs for the time\nbeing.  If a directory does not exist it will not be mounted and a\ndiagnostic will be printed.",
+          "description": "Directories to mount as read-write to the sandbox.  Currently, each\ndirectory is identity-mapped.\n\nThe full filesystem is always visible as read-only to the tool so that\nrunning commands from the host etc. works.  This is useful for tools\nthat need to write to the filesystem as well.\n\nTilde expansion for `~/` works.  Environment variables are currently not\nexpanded.  Relative paths are relative to the configuration file;\nabsolute paths are left as-is.  No globs for the time being.  If a\ndirectory does not exist it will not be mounted and a diagnostic will be\nprinted.",
           "type": "array",
           "default": [],
           "items": {
@@ -62,7 +66,8 @@
           ],
           "default": null
         }
-      }
+      },
+      "additionalProperties": false
     }
   }
 }

@@ -261,9 +261,11 @@ struct ToolConfig {
 #[cfg_attr(feature = "schema", derive(JsonSchema))]
 struct Config {
     /// Global configuration for all tools.
+    #[serde(default)]
     global: ToolConfig,
 
     /// Per-tool configuration.
+    #[serde(default)]
     tools: std::collections::HashMap<String, ToolConfig>,
 }
 
