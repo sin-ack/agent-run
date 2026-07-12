@@ -355,6 +355,8 @@ enum ConfigError {
     Read(#[from] std::io::Error),
     #[error("Failed to parse configuration file: {0}")]
     Parse(#[from] toml::de::Error),
+    #[error("Duplicate environment variable entries for {0}")]
+    DuplicateEnvEntries(String),
 }
 
 fn parse_config(path: Option<&std::path::Path>) -> Result<(Config, Option<PathBuf>), ConfigError> {
@@ -396,6 +398,35 @@ fn parse_config(path: Option<&std::path::Path>) -> Result<(Config, Option<PathBu
             Config::default()
         }
     };
+
+    // Ensure we don't have duplicate env entries.
+    if config.global.env.len()
+        != config
+            .global
+            .env
+            .iter()
+            .map(|e| &e.key)
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+    {
+        return Err(ConfigError::DuplicateEnvEntries("global".to_string()));
+    }
+
+    for (tool_name, tool_config) in &config.tools {
+        if tool_config.env.len()
+            != tool_config
+                .env
+                .iter()
+                .map(|e| &e.key)
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+        {
+            return Err(ConfigError::DuplicateEnvEntries(format!(
+                "tools.{}",
+                tool_name
+            )));
+        }
+    }
 
     // Network is enabled if unspecified by the user.
     config.global.network = config.global.network.or(Some(true));
