@@ -538,6 +538,8 @@ fn main() -> anyhow::Result<ExitCode> {
     let mut argv: Vec<Cow<CStr>> = Vec::new();
     argv.push(Cow::Borrowed(c"bwrap"));
     argv.push(Cow::Borrowed(c"--unshare-all"));
+    argv.push(Cow::Borrowed(c"--die-with-parent"));
+    argv.push(Cow::Borrowed(c"--new-session"));
 
     let network = tool_config
         .network
