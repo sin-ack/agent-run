@@ -205,7 +205,7 @@ impl JsonSchema for EnvironmentVariable {
                             Two formats are supported: `KEY=VALUE` sets the environment variable `KEY` to `VALUE`.  \
                             `KEY` sets the environment variable `KEY` to the value of the environment variable `KEY` that agent-run sees.  \
                             If `KEY` is not set in the environment, it will be unset for the tool.",
-            "pattern": r"^[^=]+(=[^=]*)?$",
+            "pattern": r"^[^=]+(=.*)?$",
         })
     }
 }
