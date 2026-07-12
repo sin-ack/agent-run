@@ -1,5 +1,6 @@
 load("@bazel_lib//lib:run_binary.bzl", "run_binary")
 load("@bazel_lib//lib:write_source_files.bzl", "write_source_files")
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@crates//:defs.bzl", "aliases", "all_crate_deps")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_rust//rust:defs.bzl", "rust_clippy", "rust_test")
@@ -114,4 +115,9 @@ rust_clippy(
         ":generate_schema",
         ":integration_test",
     ],
+)
+
+build_test(
+    name = "clippy_test",
+    targets = [":clippy"],
 )

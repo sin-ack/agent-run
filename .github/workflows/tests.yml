@@ -33,6 +33,3 @@ jobs:
 
       - name: Run tests
         run: bazel test //...
-
-      - name: Run Clippy
-        run: bazel build //:clippy

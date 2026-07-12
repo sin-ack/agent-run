@@ -84,7 +84,6 @@ jobs:
       - name: Run final checks
         run: |
           bazel test //...
-          bazel build //:clippy
           test -z "$(git status --porcelain --untracked-files=no)"
 
       - name: Build release binaries
