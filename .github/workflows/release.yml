@@ -1,0 +1,155 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Enable unprivileged user namespaces
+        run: sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
+
+      - uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
+
+      - name: Check release version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Invalid release tag: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          version="${GITHUB_REF_NAME#v}"
+
+          cargo_version="$(tools/workspace-status.sh)"
+          cargo_version="${cargo_version#STABLE_AGENT_RUN_VERSION }"
+          module_version="$(
+            awk '
+              /^module\(/ { in_module = 1; next }
+              in_module && $1 == "version" {
+                gsub(/[",]/, "", $3)
+                print $3
+                exit
+              }
+            ' MODULE.bazel
+          )"
+          lock_version="$(
+            awk '
+              /^\[\[package\]\]$/ { in_package = 0; next }
+              $1 == "name" && $3 == "\"agent-run\"" { in_package = 1; next }
+              in_package && $1 == "version" {
+                gsub(/"/, "", $3)
+                print $3
+                exit
+              }
+            ' Cargo.lock
+          )"
+
+          for entry in \
+            "Cargo.toml:$cargo_version" \
+            "Cargo.lock:$lock_version" \
+            "MODULE.bazel:$module_version"; do
+            source="${entry%%:*}"
+            actual="${entry#*:}"
+            if [[ "$actual" != "$version" ]]; then
+              echo "$source has version '$actual', expected '$version'" >&2
+              exit 1
+            fi
+          done
+
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Run final checks
+        run: |
+          bazel test //... --test_output=errors
+          bazel build //:clippy
+          test -z "$(git status --porcelain --untracked-files=no)"
+
+      - name: Build release binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir dist
+
+          for target in x86_64-linux-gnu aarch64-linux-gnu; do
+            bazel build \
+              --config=size \
+              --platforms="//platforms:$target" \
+              //:agent-run
+            cp -L bazel-bin/agent-run "dist/agent-run-$target"
+            chmod 755 "dist/agent-run-$target"
+          done
+
+          file dist/agent-run-x86_64-linux-gnu | grep -F "x86-64"
+          file dist/agent-run-aarch64-linux-gnu | grep -F "ARM aarch64"
+
+          expected="agent-run $RELEASE_VERSION"
+          actual="$(dist/agent-run-x86_64-linux-gnu --version)"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "Release binary reported '$actual', expected '$expected'" >&2
+            exit 1
+          fi
+
+          cp LICENSE THIRD_PARTY_LICENSES.md dist/
+          (
+            cd dist
+            for binary in \
+              agent-run-aarch64-linux-gnu \
+              agent-run-x86_64-linux-gnu; do
+              sha256sum "$binary" > "$binary.sha256"
+            done
+            sha256sum --check ./*.sha256
+          )
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if draft="$(
+            gh api \
+              "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" \
+              --jq .draft \
+              2>/dev/null
+          )"; then
+            if [[ "$draft" != "true" ]]; then
+              echo "Release $GITHUB_REF_NAME already exists and is not a draft" >&2
+              exit 1
+            fi
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --draft \
+              --generate-notes \
+              --title "agent-run $GITHUB_REF_NAME" \
+              --verify-tag \
+              "dist/agent-run-x86_64-linux-gnu#x86_64 GNU/Linux binary" \
+              "dist/agent-run-aarch64-linux-gnu#aarch64 GNU/Linux binary" \
+              "dist/agent-run-x86_64-linux-gnu.sha256#x86_64 binary SHA-256 checksum" \
+              "dist/agent-run-aarch64-linux-gnu.sha256#aarch64 binary SHA-256 checksum" \
+              "dist/LICENSE#agent-run license" \
+              "dist/THIRD_PARTY_LICENSES.md#third-party license notices"
+          fi
