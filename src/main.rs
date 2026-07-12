@@ -174,20 +174,19 @@ impl<'de> Deserialize<'de> for EnvironmentVariable {
         let parts: Vec<&str> = s.splitn(2, '=').collect();
         let (key, value) = match parts.len() {
             1 => (parts[0].to_string(), EnvironmentVariableValue::Inherit),
-            2 => {
-                if parts[0].is_empty() {
-                    return Err(serde::de::Error::custom(
-                        "Environment variable key cannot be empty",
-                    ));
-                }
-
-                (
-                    parts[0].to_string(),
-                    EnvironmentVariableValue::Literal(parts[1].to_string()),
-                )
-            }
+            2 => (
+                parts[0].to_string(),
+                EnvironmentVariableValue::Literal(parts[1].to_string()),
+            ),
             _ => unreachable!(),
         };
+
+        if key.is_empty() {
+            return Err(serde::de::Error::custom(
+                "Environment variable key cannot be empty",
+            ));
+        }
+
         Ok(EnvironmentVariable { key, value })
     }
 }
