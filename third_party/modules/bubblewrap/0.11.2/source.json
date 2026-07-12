@@ -1,0 +1,8 @@
+{
+    "url": "https://github.com/containers/bubblewrap/releases/download/v0.11.2/bubblewrap-0.11.2.tar.xz",
+    "strip_prefix": "bubblewrap-0.11.2",
+    "overlay": {
+        "BUILD.bazel": "sha256-3hEYo/yNZbyhMxy2xSsZNy2KQaalBJWRlHEbagI6vB0="
+    },
+    "integrity": "sha256-aavDAAXSGGuvdzf+rNjaNWM7k89a84g47P8XxfjpJPY="
+}

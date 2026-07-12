@@ -1,0 +1,42 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+write_file(
+    name = "config_h",
+    out = "config.h",
+    content = [
+        "#define PACKAGE_STRING \"bubblewrap 0.11.2\"",
+        "/* #undef HAVE_SELINUX */",
+        "/* #undef HAVE_SELINUX_2_3 */",
+    ],
+)
+
+filegroup(
+    name = "sources",
+    srcs = glob([
+        "*.c",
+        "*.h",
+    ]),
+)
+
+cc_binary(
+    name = "bwrap",
+    srcs = [
+        ":config_h",
+        ":sources",
+    ],
+    # Required for O_PATH.
+    copts = ["-D_GNU_SOURCE"],
+    # It doesn't make sense to build bwrap for non-Linux.
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:public"],
+    deps = ["@libcap"],
+)
+
+# Need this, otherwise the target name is "bubblewrap" instead of the usual
+# "bwrap".
+alias(
+    name = "bubblewrap",
+    actual = ":bwrap",
+    visibility = ["//visibility:public"],
+)

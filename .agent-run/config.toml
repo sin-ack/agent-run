@@ -1,0 +1,9 @@
+[global]
+mount = ["..", "~/.cache/bazel"]
+
+[tools.pi]
+mount = [
+    "~/.pi",
+    # Pi writes bash outputs to /tmp/pi-bash-*.log.
+    "/tmp",
+]

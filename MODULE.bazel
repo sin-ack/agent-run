@@ -1,0 +1,43 @@
+module(
+    name = "agent-run",
+    version = "0.1.0",
+)
+
+bazel_dep(name = "llvm", version = "0.8.11")
+bazel_dep(name = "rules_rs", version = "0.0.96")
+bazel_dep(name = "bazelrc-preset.bzl", version = "1.9.2")
+bazel_dep(name = "bubblewrap", version = "0.11.2")
+bazel_dep(name = "platforms", version = "1.1.0")
+
+# Fetch bubblewrap from the repo-local registry.
+single_version_override(
+    module_name = "bubblewrap",
+    registry = "file://%workspace%/third_party",
+)
+
+toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
+toolchains.toolchain(
+    edition = "2024",
+    version = "nightly/2026-07-01",
+)
+use_repo(toolchains, "default_rust_toolchains")
+
+rules_rust = use_extension("@rules_rs//rs:rules_rust.bzl", "rules_rust")
+use_repo(rules_rust, "rules_rust")
+
+register_toolchains(
+    "@default_rust_toolchains//:all",
+    "@llvm//toolchain:all",
+)
+
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.from_cargo(
+    name = "crates",
+    cargo_lock = "//:Cargo.lock",
+    cargo_toml = "//:Cargo.toml",
+    platform_triples = [
+        "aarch64-unknown-linux-gnu",
+        "x86_64-unknown-linux-gnu",
+    ],
+)
+use_repo(crate, "crates")

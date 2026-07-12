@@ -1,0 +1,17 @@
+load("@crates//:defs.bzl", "aliases", "all_crate_deps")
+load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
+
+rust_binary(
+    name = "agent-run",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = aliases(),
+    compile_data = [
+        "@bubblewrap",
+    ],
+    crate_name = "agent_run",
+    edition = "2024",
+    rustc_env = {
+        "BUBBLEWRAP_PATH": "$(execpath @bubblewrap)",
+    },
+    deps = all_crate_deps(normal = True),
+)
