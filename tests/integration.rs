@@ -522,6 +522,16 @@ fn install_signal_handler(signal: libc::c_int) {
     }
 }
 
+fn assert_command_is_in_foreground_process_group() {
+    // SAFETY: These functions only inspect the current process and stdin's terminal.
+    let (process_group, foreground_process_group) =
+        unsafe { (libc::getpgrp(), libc::tcgetpgrp(libc::STDIN_FILENO)) };
+    assert_eq!(
+        process_group, foreground_process_group,
+        "command is not in the terminal's foreground process group"
+    );
+}
+
 fn wait_for_signal() -> ! {
     println!("READY");
     std::io::stdout().flush().unwrap();
@@ -601,12 +611,17 @@ fn run_test_helper(operation: &str) {
             println!("TIOCSTI_EPERM");
             println!("TTY_OK");
         }
-        "wait_forever" => wait_for_signal(),
+        "wait_forever" => {
+            assert_command_is_in_foreground_process_group();
+            wait_for_signal();
+        }
         "wait_sigwinch" => {
+            assert_command_is_in_foreground_process_group();
             install_signal_handler(libc::SIGWINCH);
             wait_for_signal();
         }
         "wait_sigint" => {
+            assert_command_is_in_foreground_process_group();
             install_signal_handler(libc::SIGINT);
             wait_for_signal();
         }
@@ -620,6 +635,12 @@ fn agent_run_test_helper() {
         return;
     };
     run_test_helper(operation.to_str().expect("helper operation must be UTF-8"));
+}
+
+enum PtyRead {
+    Data,
+    Timeout,
+    Eof,
 }
 
 #[derive(Clone, Copy)]
@@ -764,7 +785,7 @@ impl PtyProcess {
         self.status
     }
 
-    fn read_once(&mut self, timeout: Duration) -> bool {
+    fn read_once(&mut self, timeout: Duration) -> PtyRead {
         let timeout_millis = timeout.as_millis().min(libc::c_int::MAX as u128) as libc::c_int;
         let mut poll_fd = libc::pollfd {
             fd: self.master,
@@ -776,12 +797,12 @@ impl PtyProcess {
         if result < 0 {
             let error = std::io::Error::last_os_error();
             if error.kind() == std::io::ErrorKind::Interrupted {
-                return false;
+                return PtyRead::Timeout;
             }
             panic!("poll failed: {error}");
         }
         if result == 0 {
-            return false;
+            return PtyRead::Timeout;
         }
 
         let mut buffer = [0_u8; 4096];
@@ -789,16 +810,19 @@ impl PtyProcess {
         let count = unsafe { libc::read(self.master, buffer.as_mut_ptr().cast(), buffer.len()) };
         if count < 0 {
             let error = std::io::Error::last_os_error();
-            if matches!(error.raw_os_error(), Some(libc::EIO | libc::EAGAIN)) {
-                return false;
+            if error.raw_os_error() == Some(libc::EIO) {
+                return PtyRead::Eof;
+            }
+            if error.raw_os_error() == Some(libc::EAGAIN) {
+                return PtyRead::Timeout;
             }
             panic!("failed to read PTY: {error}");
         }
         if count == 0 {
-            return false;
+            return PtyRead::Eof;
         }
         self.output.extend_from_slice(&buffer[..count as usize]);
-        true
+        PtyRead::Data
     }
 
     fn read_until(&mut self, marker: &[u8]) {
@@ -814,13 +838,14 @@ impl PtyProcess {
                 String::from_utf8_lossy(marker),
                 String::from_utf8_lossy(&self.output)
             );
-            let read = self.read_once(Duration::from_millis(50));
-            assert!(
-                self.poll_status().is_none() || read,
-                "process exited before {:?}; output: {}",
-                String::from_utf8_lossy(marker),
-                String::from_utf8_lossy(&self.output)
-            );
+            if matches!(self.read_once(Duration::from_millis(50)), PtyRead::Eof) {
+                panic!(
+                    "PTY closed before {:?}; wait status: {:?}; output: {}",
+                    String::from_utf8_lossy(marker),
+                    self.poll_status(),
+                    String::from_utf8_lossy(&self.output)
+                );
+            }
         }
     }
 
@@ -834,7 +859,7 @@ impl PtyProcess {
             );
             self.read_once(Duration::from_millis(50));
         }
-        while self.read_once(Duration::from_millis(10)) {}
+        while matches!(self.read_once(Duration::from_millis(10)), PtyRead::Data) {}
         (self.status.unwrap(), self.output.clone())
     }
 
