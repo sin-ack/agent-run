@@ -6,7 +6,10 @@ use std::{
     borrow::Cow,
     ffi::{CStr, CString},
     io::{PipeWriter, Write},
-    os::fd::{AsFd as _, AsRawFd as _, FromRawFd, IntoRawFd as _, OwnedFd},
+    os::{
+        fd::{AsFd as _, AsRawFd as _, FromRawFd, IntoRawFd as _, OwnedFd},
+        unix::ffi::OsStringExt as _,
+    },
     path::PathBuf,
     process::ExitCode,
 };
@@ -658,14 +661,14 @@ fn main() -> anyhow::Result<ExitCode> {
     for env in tool_config.env {
         match env.value {
             EnvironmentVariableValue::Inherit => {
-                match std::env::var(&env.key).ok() {
+                match std::env::var_os(&env.key) {
                     Some(value) => {
-                        log_trace!("Inheriting environment variable {}={}", env.key, value);
+                        log_trace!("Inheriting environment variable {}={:?}", env.key, value);
 
                         argv.push(Cow::Borrowed(c"--setenv"));
                         argv.push(Cow::Owned(cstring(env.key, "environment variable key")?));
                         argv.push(Cow::Owned(cstring(
-                            value,
+                            value.into_vec(),
                             "inherited environment variable value",
                         )?));
                     }
@@ -697,11 +700,11 @@ fn main() -> anyhow::Result<ExitCode> {
     }
 
     let mut envp: Vec<CString> = Vec::new();
-    for (key, value) in std::env::vars() {
-        envp.push(cstring(
-            format!("{}={}", key, value),
-            "host environment entry",
-        )?);
+    for (key, value) in std::env::vars_os() {
+        let mut entry = key.into_vec();
+        entry.push(b'=');
+        entry.extend(value.into_vec());
+        envp.push(cstring(entry, "host environment entry")?);
     }
 
     log_trace!(
