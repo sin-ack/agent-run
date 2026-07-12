@@ -4,7 +4,6 @@ fn main() {
     if let Ok(bubblewrap_path) = std::env::var("BUBBLEWRAP_PATH") {
         // Pass it through, it was already set by the user.
         println!("cargo:rustc-env=BUBBLEWRAP_PATH={bubblewrap_path}");
-        return;
     } else {
         // See if we're in the Bazel workspace.
         if std::fs::metadata("MODULE.bazel").is_ok() {
@@ -19,7 +18,7 @@ fn main() {
             // We're in the Bazel workspace.  Build and get the path to the
             // hermetic bwrap binary.
             let result = std::process::Command::new("bazel")
-                .args(&["build", "@bubblewrap"])
+                .args(["build", "@bubblewrap"])
                 .status()
                 .expect("Failed to run Bazel build for bwrap");
             if !result.success() {
@@ -28,7 +27,7 @@ fn main() {
 
             // Get the path to the built binary.
             let output = std::process::Command::new("bazel")
-                .args(&["--quiet", "cquery", "@bubblewrap", "--output=files"])
+                .args(["--quiet", "cquery", "@bubblewrap", "--output=files"])
                 .output()
                 .expect("Failed to run Bazel cquery for bwrap");
             let lines =

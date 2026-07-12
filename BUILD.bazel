@@ -2,6 +2,7 @@ load("@bazel_lib//lib:run_binary.bzl", "run_binary")
 load("@bazel_lib//lib:write_source_files.bzl", "write_source_files")
 load("@crates//:defs.bzl", "aliases", "all_crate_deps")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_clippy")
 
 rust_binary(
     name = "agent-run",
@@ -52,4 +53,12 @@ write_source_files(
     files = {
         "schema.json": ":schema",
     },
+)
+
+rust_clippy(
+    name = "clippy",
+    deps = [
+        ":agent-run",
+        ":generate_schema",
+    ],
 )

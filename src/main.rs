@@ -117,26 +117,20 @@ fn exec_bwrap<SA: AsRef<CStr>, SE: AsRef<CStr>>(
             let status =
                 nix::sys::wait::waitpid(Some(child), None).map_err(BubblewrapError::Waitpid)?;
             match status {
-                nix::sys::wait::WaitStatus::Exited(_, code) => {
-                    return Ok(ExitCode::from(code as u8));
-                }
+                nix::sys::wait::WaitStatus::Exited(_, code) => Ok(ExitCode::from(code as u8)),
                 nix::sys::wait::WaitStatus::Signaled(_, signal, _) => {
-                    return Err(BubblewrapError::BwrapSignaled(signal));
+                    Err(BubblewrapError::BwrapSignaled(signal))
                 }
-                _ => {
-                    return Err(BubblewrapError::BwrapUnexpectedStatus(status));
-                }
+                _ => Err(BubblewrapError::BwrapUnexpectedStatus(status)),
             }
         }
         Ok(ForkResult::Child) => {
-            nix::unistd::execveat(fd, c"", &argv, &envp, nix::fcntl::AtFlags::AT_EMPTY_PATH)
+            nix::unistd::execveat(fd, c"", argv, envp, nix::fcntl::AtFlags::AT_EMPTY_PATH)
                 .map_err(BubblewrapError::Execveat)?;
 
             unreachable!();
         }
-        Err(e) => {
-            return Err(BubblewrapError::Fork(e));
-        }
+        Err(e) => Err(BubblewrapError::Fork(e)),
     }
 }
 
@@ -402,7 +396,7 @@ fn parse_config(path: Option<&std::path::Path>) -> Result<(Config, Option<PathBu
 
     let mut config = match &path {
         Some(path) => {
-            let config_str = std::fs::read_to_string(&path)?;
+            let config_str = std::fs::read_to_string(path)?;
             let config: Config = toml::from_str(&config_str)?;
             log_debug!("Parsed configuration file: {}", path.display());
             config
@@ -510,12 +504,12 @@ enum PathResolutionError {
 }
 
 fn resolve_path(
-    path: &PathBuf,
-    config_path: Option<&PathBuf>,
+    path: &std::path::Path,
+    config_path: Option<&std::path::Path>,
 ) -> Result<Option<PathBuf>, PathResolutionError> {
     let expanded = shellexpand::tilde(path.to_str().ok_or_else(|| {
         PathResolutionError::Resolve(
-            path.clone(),
+            path.to_path_buf(),
             std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid path"),
         )
     })?)
@@ -602,15 +596,16 @@ fn main() -> anyhow::Result<ExitCode> {
     let seccomp_filter_fd = seccomp::create_tiocsti_filter()
         .map_err(|e| anyhow::anyhow!("Failed to create seccomp filter: {e}"))?;
 
-    let mut argv: Vec<Cow<CStr>> = Vec::new();
-    argv.push(Cow::Borrowed(c"bwrap"));
-    argv.push(Cow::Borrowed(c"--unshare-all"));
-    argv.push(Cow::Borrowed(c"--die-with-parent"));
-    argv.push(Cow::Borrowed(c"--seccomp"));
-    argv.push(Cow::Owned(cstring(
-        seccomp_filter_fd.as_raw_fd().to_string(),
-        "seccomp file descriptor",
-    )?));
+    let mut argv: Vec<Cow<CStr>> = vec![
+        Cow::Borrowed(c"bwrap"),
+        Cow::Borrowed(c"--unshare-all"),
+        Cow::Borrowed(c"--die-with-parent"),
+        Cow::Borrowed(c"--seccomp"),
+        Cow::Owned(cstring(
+            seccomp_filter_fd.as_raw_fd().to_string(),
+            "seccomp file descriptor",
+        )?),
+    ];
 
     let network = tool_config
         .network
@@ -634,7 +629,7 @@ fn main() -> anyhow::Result<ExitCode> {
     argv.push(Cow::Borrowed(c"/dev"));
 
     for mount in tool_config.mount {
-        let Some(expanded) = resolve_path(&mount, config_path.as_ref()).map_err(|e| {
+        let Some(expanded) = resolve_path(&mount, config_path.as_deref()).map_err(|e| {
             anyhow::anyhow!("Failed to resolve mount path {}: {}", mount.display(), e)
         })?
         else {

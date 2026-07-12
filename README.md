@@ -142,6 +142,7 @@ You need [Bazel](https://bazel.build).  I recommend using
 - Run it via Bazel: `bazel run --run_in_cwd //:agent-run -- [args...]`
 - Build a release binary: `bazel build --config=size --platforms=//platforms:[target] //:agent-run`
 - Run tests: `bazel test //...`
+- Run Clippy: `bazel build //:clippy`
 - Regenerate third-party license notices (requires
   [`cargo-about`](https://github.com/EmbarkStudios/cargo-about)):
   `tools/update-third-party-licenses.sh`
