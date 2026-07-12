@@ -1,5 +1,6 @@
 fn main() {
     // XXX: This build script only runs *outside* Bazel.
+    println!("cargo:rerun-if-env-changed=BUBBLEWRAP_PATH");
 
     if let Ok(bubblewrap_path) = std::env::var("BUBBLEWRAP_PATH") {
         // Pass it through, it was already set by the user.
