@@ -1,3 +1,4 @@
+mod seccomp;
 #[macro_use]
 mod tracing;
 
@@ -5,7 +6,7 @@ use std::{
     borrow::Cow,
     ffi::{CStr, CString},
     io::{PipeWriter, Write},
-    os::fd::{AsFd as _, FromRawFd, IntoRawFd as _, OwnedFd},
+    os::fd::{AsFd as _, AsRawFd as _, FromRawFd, IntoRawFd as _, OwnedFd},
     path::PathBuf,
     process::ExitCode,
 };
@@ -579,11 +580,17 @@ fn main() -> anyhow::Result<ExitCode> {
     };
     log_trace!("Merged tool configuration: {:#?}", tool_config);
 
+    let seccomp_filter_fd = seccomp::create_tiocsti_filter()
+        .map_err(|e| anyhow::anyhow!("Failed to create seccomp filter: {e}"))?;
+
     let mut argv: Vec<Cow<CStr>> = Vec::new();
     argv.push(Cow::Borrowed(c"bwrap"));
     argv.push(Cow::Borrowed(c"--unshare-all"));
     argv.push(Cow::Borrowed(c"--die-with-parent"));
-    argv.push(Cow::Borrowed(c"--new-session"));
+    argv.push(Cow::Borrowed(c"--seccomp"));
+    argv.push(Cow::Owned(
+        CString::new(seccomp_filter_fd.as_raw_fd().to_string()).unwrap(),
+    ));
 
     let network = tool_config
         .network
@@ -691,6 +698,7 @@ fn main() -> anyhow::Result<ExitCode> {
         envp.iter().map(|s| s.as_c_str()).collect::<Vec<_>>()
     );
 
-    exec_bwrap(argv.as_slice(), envp.as_slice())
-        .map_err(|e| anyhow::anyhow!("Failed to execute bwrap: {}", e))
+    let result = exec_bwrap(argv.as_slice(), envp.as_slice());
+    drop(seccomp_filter_fd);
+    result.map_err(|e| anyhow::anyhow!("Failed to execute bwrap: {}", e))
 }
