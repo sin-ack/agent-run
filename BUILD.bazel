@@ -1,3 +1,5 @@
+load("@bazel_lib//lib:run_binary.bzl", "run_binary")
+load("@bazel_lib//lib:write_source_files.bzl", "write_source_files")
 load("@crates//:defs.bzl", "aliases", "all_crate_deps")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 
@@ -8,10 +10,46 @@ rust_binary(
     compile_data = [
         "@bubblewrap",
     ],
+    crate_features = [],
+    crate_name = "agent_run",
+    edition = "2024",
+    rustc_env = {
+        "BUBBLEWRAP_PATH": "$(execpath @bubblewrap)",
+    },
+    visibility = ["//visibility:public"],
+    deps = all_crate_deps(normal = True),
+)
+
+# TODO: Make it another entrypoint?
+rust_binary(
+    name = "generate_schema",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = aliases(),
+    compile_data = [
+        "@bubblewrap",
+    ],
+    crate_features = ["schema"],
     crate_name = "agent_run",
     edition = "2024",
     rustc_env = {
         "BUBBLEWRAP_PATH": "$(execpath @bubblewrap)",
     },
     deps = all_crate_deps(normal = True),
+)
+
+run_binary(
+    name = "schema",
+    outs = ["generated_schema.json"],
+    args = [
+        "--schema",
+        "$@",
+    ],
+    tool = ":generate_schema",
+)
+
+write_source_files(
+    name = "write_schema",
+    files = {
+        "schema.json": ":schema",
+    },
 )

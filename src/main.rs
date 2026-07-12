@@ -14,6 +14,9 @@ use nix::unistd::ForkResult;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+#[cfg(feature = "schema")]
+use schemars::{JsonSchema, json_schema, schema_for};
+
 static BUBBLEWRAP_BINARY: &[u8] = include_bytes!(env!("BUBBLEWRAP_PATH"));
 
 #[derive(Error, Debug)]
@@ -189,10 +192,29 @@ impl<'de> Deserialize<'de> for EnvironmentVariable {
     }
 }
 
+#[cfg(feature = "schema")]
+impl JsonSchema for EnvironmentVariable {
+    fn schema_name() -> Cow<'static, str> {
+        "EnvironmentVariable".into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        json_schema!({
+            "type": "string",
+            "description": "An environment variable to set for a tool.  \
+                            Two formats are supported: `KEY=VALUE` sets the environment variable `KEY` to `VALUE`.  \
+                            `KEY` sets the environment variable `KEY` to the value of the environment variable `KEY` that agent-run sees.  \
+                            If `KEY` is not set in the environment, it will be unset for the tool.",
+            "pattern": r"^[^=]+(=[^=]*)?$",
+        })
+    }
+}
+
 /// Configuration for a specific tool.  Tools are matched based on the basename
 /// of the first argument passed to the agent-run command.  If no tool matches,
 /// the global configuration is used.
 #[derive(Serialize, Deserialize, Default, Debug)]
+#[cfg_attr(feature = "schema", derive(JsonSchema))]
 struct ToolConfig {
     /// Whether to enable network access.  If false, the tool will not be able
     /// to use the network.  Default is true.
@@ -236,6 +258,7 @@ struct ToolConfig {
 
 /// Configuration for agent-run.
 #[derive(Serialize, Deserialize, Default, Debug)]
+#[cfg_attr(feature = "schema", derive(JsonSchema))]
 struct Config {
     /// Global configuration for all tools.
     global: ToolConfig,
@@ -277,14 +300,37 @@ impl Args {
                 command.extend(args);
                 break;
             } else if arg == "--config" {
-                config = Some(args.next().ok_or_else(|| anyhow::anyhow!("--config requires a path"))?.into());
+                config = Some(
+                    args.next()
+                        .ok_or_else(|| anyhow::anyhow!("--config requires a path"))?
+                        .into(),
+                );
             } else if let Some(path) = arg.strip_prefix("--config=") {
                 config = Some(path.into());
+            } else if cfg!(feature = "schema") && arg == "--schema" {
+                #[cfg(feature = "schema")]
+                {
+                    let path = args
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("--schema requires a path"))?;
+
+                    let schema = schema_for!(Config);
+                    let mut file = std::fs::File::create(&path).map_err(|e| {
+                        anyhow::anyhow!("Failed to create schema file {}: {}", path, e)
+                    })?;
+
+                    write!(file, "{}", serde_json::to_string_pretty(&schema).unwrap()).map_err(
+                        |e| anyhow::anyhow!("Failed to write schema file {}: {}", path, e),
+                    )?;
+                    std::process::exit(0);
+                }
+
+                #[cfg(not(feature = "schema"))]
+                {
+                    unreachable!();
+                }
             } else if arg == "-h" || arg == "--help" {
-                print!(
-                    "{}",
-                    HELP_TEXT
-                );
+                print!("{}", HELP_TEXT);
                 std::process::exit(0);
             } else if arg.starts_with('-') {
                 anyhow::bail!("unknown option: {arg}");
@@ -314,9 +360,7 @@ fn parse_config(path: Option<&std::path::Path>) -> Result<(Config, Option<PathBu
             path.to_path_buf()
         }
         None => {
-            log_debug!(
-                "No configuration file specified, searching for .agent-run/config.toml"
-            );
+            log_debug!("No configuration file specified, searching for .agent-run/config.toml");
 
             // Find the closest .agent-run/config.toml file.
             let mut dir = std::env::current_dir()?;
@@ -508,11 +552,7 @@ fn main() -> anyhow::Result<ExitCode> {
 
     for mount in tool_config.mount {
         let expanded = resolve_path(&mount, config_path.as_ref()).map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to resolve mount path {}: {}",
-                mount.display(),
-                e
-            )
+            anyhow::anyhow!("Failed to resolve mount path {}: {}", mount.display(), e)
         })?;
         log_debug!("Mounting {} as read-write", expanded.display());
 

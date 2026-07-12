@@ -7,6 +7,7 @@ bazel_dep(name = "llvm", version = "0.8.11")
 bazel_dep(name = "rules_rs", version = "0.0.96")
 bazel_dep(name = "bazelrc-preset.bzl", version = "1.9.2")
 bazel_dep(name = "bubblewrap", version = "0.11.2")
+bazel_dep(name = "bazel_lib", version = "3.2.2")
 bazel_dep(name = "platforms", version = "1.1.0")
 
 # Fetch bubblewrap from the repo-local registry.
@@ -39,5 +40,12 @@ crate.from_cargo(
         "aarch64-unknown-linux-gnu",
         "x86_64-unknown-linux-gnu",
     ],
+)
+crate.annotation(
+    crate = "agent-run",
+    # Pull in the dependencies for JSON schema generation.  The final binary
+    # won't contain it but we generate the schema from Rust code during
+    # development.
+    crate_features = ["schema"],
 )
 use_repo(crate, "crates")
