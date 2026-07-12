@@ -10,6 +10,22 @@ Run a coding agent in a sandboxed environment.
 
 [^1]: Currently aarch64 and x86_64 are directly supported.
 
+## Usage
+
+- Use one of the installation methods below.
+- Write your [configuration](#configuration).
+- Run your agent: `agent-run <pi|opencode|codex|claude>`.
+
+That's it!
+
+> [!NOTE]
+> agent-run uses bwrap so it only works on a Linux system.  Additionally you
+> need unprivileged user namespaces enabled.
+
+> [!NOTE]
+> agent-run won't work on NixOS at the moment since it embeds a dynamically-linked
+> bwrap binary.  I might add a build configuration for this later.
+
 ## Installation
 
 ### Mise
@@ -23,18 +39,8 @@ date filters.)
 
 - Download the binary from the latest release: https://github.com/sin-ack/agent-run/releases/latest
 - Put it somewhere in your PATH, e.g. `$HOME/.local/bin`.
-- Write your [configuration](#configuration).
-- Run your agent: `agent-run <pi|opencode|codex|claude>`.
 
-That's it!
-
-> [!NOTE]
-> agent-run uses bwrap so it only works on a Linux system.  Additionally you
-> need unprivileged user namespaces enabled.
-
-> [!NOTE]
-> agent-run won't work on NixOS at the moment since it embeds a dynamically-linked
-> bwrap binary.  I might add a build configuration for this later.
+Don't forget to `chmod +x`!
 
 ## Configuration
 
