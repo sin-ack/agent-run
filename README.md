@@ -4,7 +4,7 @@ Run a coding agent in a sandboxed environment.
 
 ## Features
 
-- Tiny standalone binary: 645KB on x86_64, 601KB on aarch64.
+- Tiny standalone binary (<1MB).  Runs on any recent GNU/Linux system.
 - Simple TOML-based configuration.
 - JSON schema for config assistance.
 
@@ -85,11 +85,11 @@ Tool configs have the following keys:
 - `network`: Whether to allow network access within the sandbox.
   Defaults to true.
 - `mount`: Paths to mount as read-write.  The host filesystem is always mounted
-  read-only; this only makes certain paths writable.  Tildes are expanded (both
-  `~` and `~user`).  Environment variables are not expanded.  If the path is
-  relative, it is treated as relative to the configuration file itself.  Absolute
-  paths are passed as-is.  We always identity-mount into the sandbox.  If the
-  given path is not found 
+  read-only; this only makes certain paths writable.  Tildes are expanded.
+  Environment variables are not expanded.  If the path is relative, it is
+  treated as relative to the configuration file itself.  Absolute paths are
+  passed as-is.  We always identity-mount into the sandbox.  If the given path
+  is not found a diagnostic warning is printed and the path is left read-only.
 - `env`: Environment variables to pass to the sandbox.  If `inherit_env` is true,
   this is merged into the host environment variables.  Each argument is a string
   in one of two forms:

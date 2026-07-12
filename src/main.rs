@@ -235,11 +235,11 @@ struct ToolConfig {
     /// running commands from the host etc. works.  This is useful for tools
     /// that need to write to the filesystem as well.
     ///
-    /// Shell expansions such as `~` and `~user` work.  Environment variables
-    /// are currently not expanded.  Relative paths are relative to the
-    /// configuration file; absolute paths are left as-is. No globs for the time
-    /// being.  If a directory does not exist it will not be mounted and a
-    /// diagnostic will be printed.
+    /// Tilde expansion for `~/` works.  Environment variables are currently not
+    /// expanded.  Relative paths are relative to the configuration file;
+    /// absolute paths are left as-is.  No globs for the time being.  If a
+    /// directory does not exist it will not be mounted and a diagnostic will be
+    /// printed.
     #[serde(default)]
     mount: Vec<std::path::PathBuf>,
 
