@@ -10,7 +10,6 @@ use std::{
     process::ExitCode,
 };
 
-use clap::Parser;
 use nix::unistd::ForkResult;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -246,17 +245,58 @@ struct Config {
 }
 
 /// Command-line arguments for agent-run.
-#[derive(Parser, Debug)]
+#[derive(Debug)]
 struct Args {
-    /// Path to the configuration file.  If not specified, the closest
-    /// `.agent-run/config.toml` file is used.
-    #[arg(long)]
     config: Option<std::path::PathBuf>,
-
-    /// The command to run in the sandbox.  The first argument is used to
-    /// determine which tool configuration to use.
-    #[arg(required = true, trailing_var_arg = true)]
     command: Vec<String>,
+}
+
+static HELP_TEXT: &str = r#"Run a coding agent in a sandboxed environment.
+
+Usage: agent-run [OPTIONS] [--] <COMMAND>...
+
+Arguments:
+  <COMMAND>...  The command to run in the sandbox. The first argument is used to
+                determine which tool configuration to use
+
+Options:
+      --config <CONFIG>  Path to the configuration file. If not specified, the closest
+                         `.agent-run/config.toml` file is used
+  -h, --help             Print help
+"#;
+
+impl Args {
+    fn parse() -> anyhow::Result<Self> {
+        let mut args = std::env::args().skip(1);
+        let mut config = None;
+        let mut command = Vec::new();
+        while let Some(arg) = args.next() {
+            if !command.is_empty() {
+                command.push(arg);
+            } else if arg == "--" {
+                command.extend(args);
+                break;
+            } else if arg == "--config" {
+                config = Some(args.next().ok_or_else(|| anyhow::anyhow!("--config requires a path"))?.into());
+            } else if let Some(path) = arg.strip_prefix("--config=") {
+                config = Some(path.into());
+            } else if arg == "-h" || arg == "--help" {
+                print!(
+                    "{}",
+                    HELP_TEXT
+                );
+                std::process::exit(0);
+            } else if arg.starts_with('-') {
+                anyhow::bail!("unknown option: {arg}");
+            } else {
+                command.push(arg);
+            }
+        }
+        if command.is_empty() {
+            anyhow::bail!("no command specified (try --help)");
+        }
+        Ok(Self { config, command })
+    }
 }
 
 #[derive(Error, Debug)]
@@ -414,7 +454,7 @@ fn resolve_path(
 }
 
 fn main() -> anyhow::Result<ExitCode> {
-    let args = Args::parse();
+    let args = Args::parse()?;
     log_trace!("Parsed command-line arguments: {:#?}", args);
 
     let (mut config, config_path) = parse_config(args.config.as_deref())?;
