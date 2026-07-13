@@ -79,6 +79,12 @@
       };
     });
 
+    overlays = {
+      default = final: _prev: {
+        agent-run = mkAgentRun final;
+      };
+    };
+
     checks = forAllSystems (system: {
       default = self.packages.${system}.default;
     });
